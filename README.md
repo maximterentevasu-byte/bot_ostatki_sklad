@@ -1,168 +1,144 @@
-# Telegram бот для загрузки Excel в GitHub
+# Telegram bot: Excel upload + barcode check
 
-Готовый проект на **Node.js + Telegraf**, адаптированный под **Railway**.
+Бот на **Node.js + Telegraf** для запуска на **Railway**.
 
 ## Что умеет
 
-- показывает кнопки после `/start`
-- кнопка **«Загрузить файл»** просит отправить Excel-файл
-- принимает `.xlsx` и `.xls`
-- после загрузки отправляет файл в ваш GitHub-репозиторий
-- кнопка **«Проверить ШК»** пока оставлена как заглушка под следующий этап
+### 1. Кнопка «Загрузить файл»
+- принимает Excel-файл в Telegram;
+- удаляет **все старые файлы** из папки `GITHUB_UPLOAD_DIR` в GitHub;
+- загружает туда новый Excel;
+- в папке всегда остается **только один файл**.
 
----
+### 2. Кнопка «Проверить ШК»
+- просит отправить фото штрихкода;
+- дает до **3 попыток**;
+- пытается распознать **EAN-13**;
+- проверяет, что код состоит из **13 цифр** и проходит checksum-проверку;
+- скачивает текущий Excel из GitHub;
+- ищет штрихкод в **столбце D**;
+- возвращает данные из столбцов **C, F, G, H, I, J, K, L**.
 
-## Структура
+## Структура проекта
 
 ```bash
 src/
   index.js
+  bot.js
   config.js
-  handlers/
-    start.js
-    upload.js
+  keyboards.js
+  messages.js
   services/
+    barcode.js
+    excel.js
     github.js
+    telegram.js
+  utils/
+    ean13.js
 package.json
-.env.example
 railway.toml
+.env.example
 README.md
 ```
 
----
-
-## 1. Установка локально
+## Установка локально
 
 ```bash
 npm install
-```
-
-Создайте файл `.env` по примеру `.env.example`.
-
-Запуск:
-
-```bash
 npm start
 ```
 
----
+## Переменные окружения
 
-## 2. Переменные окружения
-
-Нужно задать:
-
-- `BOT_TOKEN`
-- `GITHUB_TOKEN`
-- `GITHUB_OWNER`
-- `GITHUB_REPO`
-- `GITHUB_BRANCH`
-- `GITHUB_UPLOAD_DIR`
-
-Пример:
+Создайте `.env` на основе `.env.example`:
 
 ```env
-BOT_TOKEN=1234567890:YOUR_TELEGRAM_BOT_TOKEN
-GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
-GITHUB_OWNER=my-github-login
-GITHUB_REPO=my-bot-repo
+BOT_TOKEN=1234567890:AAExampleYourTelegramBotToken
+GITHUB_TOKEN=github_pat_xxxxxxxxxxxxxxxxx
+GITHUB_OWNER=your-github-login-or-org
+GITHUB_REPO=your-repo-name
 GITHUB_BRANCH=main
 GITHUB_UPLOAD_DIR=uploads
 ```
 
----
-
-## 3. Где взять значения
+## Где смотреть значения
 
 ### BOT_TOKEN
-1. Откройте Telegram.
-2. Найдите **@BotFather**.
-3. Отправьте `/mybots`.
-4. Выберите нужного бота.
-5. Нажмите **API Token** или используйте `/token`.
-6. Скопируйте токен.
+В Telegram у **@BotFather**:
+- `/mybots`
+- выбрать бота
+- `API Token` или команда `/token`
 
 ### GITHUB_TOKEN
-1. Откройте GitHub.
-2. Перейдите в **Settings** → **Developer settings** → **Personal access tokens**.
-3. Создайте токен.
-4. Для простого варианта подойдет Fine-grained token с доступом к нужному репозиторию и правами **Contents: Read and write**.
-5. Скопируйте токен один раз и сохраните его.
+В GitHub:
+- `Settings`
+- `Developer settings`
+- `Personal access tokens`
+- создайте **Fine-grained token**
+- дайте права **Contents: Read and write**
+- доступ только к нужному репозиторию
 
 ### GITHUB_OWNER
-Ваш GitHub логин или название организации.
+Логин пользователя или имя организации GitHub.
 
-Примеры:
-- `myusername`
-- `mycompany`
+Если репозиторий:
+`https://github.com/ivanpetrov/warehouse-bot`
 
-### GITHUB_REPO
-Название репозитория, куда бот будет загружать Excel.
-
-Пример:
-- `warehouse-bot`
-
-### GITHUB_BRANCH
-Ветка, куда загружать файл.
-
-Обычно:
-- `main`
-- `master`
-
-### GITHUB_UPLOAD_DIR
-Папка внутри репозитория, куда складывать Excel-файлы.
-
-Примеры:
-- `uploads`
-- `excel`
-- `data/files`
-
-Если укажете `uploads`, файлы будут загружаться, например, так:
-
-```bash
-uploads/2026-04-12T10-20-30-000Z_price.xlsx
+то:
+```env
+GITHUB_OWNER=ivanpetrov
 ```
 
----
+### GITHUB_REPO
+Имя репозитория.
 
-## 4. Деплой на Railway
+Если репозиторий:
+`https://github.com/ivanpetrov/warehouse-bot`
 
-### Вариант через GitHub
-1. Загрузите этот проект в свой GitHub-репозиторий.
-2. Зайдите в Railway.
-3. Создайте **New Project**.
-4. Выберите **Deploy from GitHub repo**.
-5. Подключите репозиторий.
-6. В разделе **Variables** добавьте все переменные окружения.
-7. Railway сам выполнит `npm install` и `npm start`.
+то:
+```env
+GITHUB_REPO=warehouse-bot
+```
 
-### Переменные в Railway
-Откройте сервис → **Variables** и вставьте:
+### GITHUB_BRANCH
+Обычно:
+```env
+GITHUB_BRANCH=main
+```
 
-- `BOT_TOKEN`
-- `GITHUB_TOKEN`
-- `GITHUB_OWNER`
-- `GITHUB_REPO`
-- `GITHUB_BRANCH`
-- `GITHUB_UPLOAD_DIR`
+### GITHUB_UPLOAD_DIR
+Папка в репозитории, куда бот будет класть Excel:
+```env
+GITHUB_UPLOAD_DIR=uploads
+```
 
----
+## Деплой на Railway
 
-## 5. Как работает логика загрузки
+1. Загрузите проект в GitHub.
+2. В Railway создайте проект из GitHub-репозитория.
+3. В Railway → **Variables** добавьте все переменные из `.env.example`.
+4. Railway сам установит зависимости и выполнит:
+```bash
+npm start
+```
 
-1. Пользователь нажимает **«Загрузить файл»**.
-2. Бот просит отправить Excel-файл.
-3. Пользователь отправляет `.xlsx` или `.xls`.
-4. Бот скачивает файл из Telegram в память.
-5. Бот загружает его в GitHub через API.
-6. Бот отправляет ссылку на загруженный файл.
+## Логика Excel
 
----
+По найденной строке в Excel бот возвращает:
+- `Название товара` → столбец **C**
+- `Общий остаток товара` → столбец **G**
+- `Общий в т.ч. в АКЦИИ` → столбец **F**
+- `Остаток склад` → столбец **H**
+- `Каменская ост` → столбец **I**
+- `Победы ост` → столбец **K**
+- `Асбест ост` → столбец **J**
+- `Все продажи за 14 дней` → столбец **L**
 
-## 6. Что делать дальше
+Штрихкод ищется в столбце **D**.
 
-Следующий этап — реализовать кнопку **«Проверить ШК»**:
-- хранить последний загруженный Excel
-- читать таблицу
-- искать товар по штрихкоду
-- показывать остаток
+## Важно
 
+- В репозиторий **не загружайте** реальный `.env`.
+- Храните реальные токены только в **Railway Variables**.
+- Для распознавания бот ожидает обычное фото штрихкода в Telegram, не документ.
+- Чем резче фото и лучше свет, тем выше шанс успешного распознавания.

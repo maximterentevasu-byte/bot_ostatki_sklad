@@ -1,29 +1,23 @@
-const { Telegraf } = require('telegraf');
-const config = require('./config');
-const {
-  handleStart,
-  handleCheckBarcodePlaceholder,
-  handleUploadButton
-} = require('./handlers/start');
-const { handleDocument } = require('./handlers/upload');
+require('dotenv').config();
 
-const bot = new Telegraf(config.botToken);
-
-bot.start(handleStart);
-bot.hears('Загрузить файл', handleUploadButton);
-bot.hears('Проверить ШК', handleCheckBarcodePlaceholder);
-bot.on('document', handleDocument);
-
-bot.catch((error) => {
-  console.error('Bot runtime error:', error);
-});
+const { getConfig } = require('./config');
+const { createBot } = require('./bot');
 
 async function bootstrap() {
-  await bot.launch();
-  console.log('Telegram bot started successfully.');
+  const config = getConfig();
+  const bot = createBot(config);
 
-  process.once('SIGINT', () => bot.stop('SIGINT'));
-  process.once('SIGTERM', () => bot.stop('SIGTERM'));
+  await bot.launch();
+  console.log('Telegram bot started');
+
+  const shutdown = async (signal) => {
+    console.log(`Received ${signal}, stopping bot...`);
+    await bot.stop(signal);
+    process.exit(0);
+  };
+
+  process.once('SIGINT', () => shutdown('SIGINT'));
+  process.once('SIGTERM', () => shutdown('SIGTERM'));
 }
 
 bootstrap().catch((error) => {

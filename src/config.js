@@ -1,6 +1,4 @@
-require('dotenv').config();
-
-const requiredVars = [
+const required = [
   'BOT_TOKEN',
   'GITHUB_TOKEN',
   'GITHUB_OWNER',
@@ -9,17 +7,21 @@ const requiredVars = [
   'GITHUB_UPLOAD_DIR'
 ];
 
-for (const key of requiredVars) {
-  if (!process.env[key]) {
-    throw new Error(`Missing required environment variable: ${key}`);
+function getConfig() {
+  const missing = required.filter((key) => !process.env[key]);
+  if (missing.length) {
+    throw new Error(`Missing environment variables: ${missing.join(', ')}`);
   }
+
+  return {
+    botToken: process.env.BOT_TOKEN,
+    githubToken: process.env.GITHUB_TOKEN,
+    githubOwner: process.env.GITHUB_OWNER,
+    githubRepo: process.env.GITHUB_REPO,
+    githubBranch: process.env.GITHUB_BRANCH,
+    githubUploadDir: process.env.GITHUB_UPLOAD_DIR.replace(/^\/+|\/+$/g, ''),
+    maxBarcodePhotoAttempts: 3
+  };
 }
 
-module.exports = {
-  botToken: process.env.BOT_TOKEN,
-  githubToken: process.env.GITHUB_TOKEN,
-  githubOwner: process.env.GITHUB_OWNER,
-  githubRepo: process.env.GITHUB_REPO,
-  githubBranch: process.env.GITHUB_BRANCH,
-  githubUploadDir: process.env.GITHUB_UPLOAD_DIR
-};
+module.exports = { getConfig };
