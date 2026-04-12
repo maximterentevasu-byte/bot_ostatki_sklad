@@ -10,6 +10,16 @@ function toDisplay(value) {
   return value ?? '—';
 }
 
+function extractBarcodeCandidates(value) {
+  const source = String(value ?? '').replace(/\s+/g, ' ').trim();
+  if (!source) {
+    return [];
+  }
+
+  const matches = source.match(/(?<!\d)\d{13}(?!\d)/g);
+  return matches ? matches.map(normalizeDigits) : [];
+}
+
 function findProductByBarcode(buffer, barcode) {
   const workbook = XLSX.read(buffer, { type: 'buffer' });
   const sheetName = workbook.SheetNames[0];
@@ -23,23 +33,27 @@ function findProductByBarcode(buffer, barcode) {
   const target = normalizeDigits(barcode);
 
   for (let row = range.s.r; row <= range.e.r; row += 1) {
-    const barcodeValue = normalizeDigits(getCell(worksheet, row, 3)); // D
-    if (barcodeValue === target) {
-      return {
-        rowNumber: row + 1,
-        productName: toDisplay(getCell(worksheet, row, 2)), // C
-        totalStock: toDisplay(getCell(worksheet, row, 6)), // G
-        promoStock: toDisplay(getCell(worksheet, row, 5)), // F
-        warehouseStock: toDisplay(getCell(worksheet, row, 7)), // H
-        kamenskayaStock: toDisplay(getCell(worksheet, row, 8)), // I
-        pobedyStock: toDisplay(getCell(worksheet, row, 10)), // K
-        asbestStock: toDisplay(getCell(worksheet, row, 9)), // J
-        sales14Days: toDisplay(getCell(worksheet, row, 11)) // L
-      };
+    const barcodeCell = getCell(worksheet, row, 3); // D
+    const candidates = extractBarcodeCandidates(barcodeCell);
+
+    if (!candidates.includes(target)) {
+      continue;
     }
+
+    return {
+      rowNumber: row + 1,
+      productName: toDisplay(getCell(worksheet, row, 2)), // C
+      totalStock: toDisplay(getCell(worksheet, row, 6)), // G
+      promoStock: toDisplay(getCell(worksheet, row, 5)), // F
+      warehouseStock: toDisplay(getCell(worksheet, row, 7)), // H
+      kamenskayaStock: toDisplay(getCell(worksheet, row, 8)), // I
+      pobedyStock: toDisplay(getCell(worksheet, row, 10)), // K
+      asbestStock: toDisplay(getCell(worksheet, row, 9)), // J
+      sales14Days: toDisplay(getCell(worksheet, row, 11)) // L
+    };
   }
 
   return null;
 }
 
-module.exports = { findProductByBarcode };
+module.exports = { findProductByBarcode, extractBarcodeCandidates };

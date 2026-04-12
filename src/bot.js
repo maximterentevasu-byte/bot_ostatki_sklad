@@ -7,9 +7,17 @@ const { decodeEan13FromBuffer } = require('./services/barcode');
 const { findProductByBarcode } = require('./services/excel');
 const { formatProductMessage } = require('./messages');
 
+function createDefaultSession() {
+  return {
+    flow: 'idle',
+    photoAttempts: 0
+  };
+}
+
 function ensureSession(ctx) {
-  if (!ctx.session || typeof ctx.session !== 'object') {
-    ctx.session = {};
+  if (!ctx.session) {
+    ctx.session = createDefaultSession();
+    return;
   }
 
   if (!ctx.session.flow) {
@@ -22,6 +30,7 @@ function ensureSession(ctx) {
 }
 
 function resetBarcodeFlow(ctx) {
+  ensureSession(ctx);
   ctx.session.flow = 'idle';
   ctx.session.photoAttempts = 0;
 }
@@ -30,12 +39,7 @@ function createBot(config) {
   const bot = new Telegraf(config.botToken);
   const githubService = new GitHubService(config);
 
-  bot.use(session({
-    defaultSession: () => ({
-      flow: 'idle',
-      photoAttempts: 0
-    })
-  }));
+  bot.use(session({ defaultSession: createDefaultSession }));
   bot.use((ctx, next) => {
     ensureSession(ctx);
     return next();
@@ -44,7 +48,8 @@ function createBot(config) {
   bot.start(async (ctx) => {
     resetBarcodeFlow(ctx);
     await ctx.reply(
-      'Нажми «Загрузить файл», чтобы загрузить базу.\nНажми «Проверить ШК», чтобы проверить остатки в базе.',
+      'Нажми «Загрузить файл», чтобы загрузить базу.
+Нажми «Проверить ШК», чтобы проверить остатки в базе.',
       mainKeyboard()
     );
   });
@@ -56,12 +61,15 @@ function createBot(config) {
   });
 
   bot.hears('Проверить ШК', async (ctx) => {
+    ensureSession(ctx);
     ctx.session.flow = 'awaiting_barcode_photo';
     ctx.session.photoAttempts = 0;
     await ctx.reply('Сфотографируйте штрихкод товара и отправьте фото. Доступно не более 3 попыток. Код должен состоять из 13 цифр и читаться полностью.', mainKeyboard());
   });
 
   bot.on('document', async (ctx) => {
+    ensureSession(ctx);
+
     if (ctx.session.flow !== 'awaiting_excel') {
       await ctx.reply('Чтобы обновить базу, сначала нажмите кнопку «Загрузить файл».', mainKeyboard());
       return;
@@ -83,13 +91,17 @@ function createBot(config) {
       await githubService.uploadSingleFile(safeName, fileBuffer);
       ctx.session.flow = 'idle';
 
-      await ctx.reply(`Файл успешно обновлен в GitHub.\nТекущий файл в папке: ${safeName}`, mainKeyboard());
+      await ctx.reply(`Файл успешно обновлен в GitHub.
+Текущий файл в папке: ${safeName}`, mainKeyboard());
     } catch (error) {
-      await ctx.reply(`Не удалось загрузить файл в GitHub.\n${error.message}`, mainKeyboard());
+      await ctx.reply(`Не удалось загрузить файл в GitHub.
+${error.message}`, mainKeyboard());
     }
   });
 
   bot.on('photo', async (ctx) => {
+    ensureSession(ctx);
+
     if (ctx.session.flow !== 'awaiting_barcode_photo') {
       await ctx.reply('Нажмите «Проверить ШК», чтобы начать проверку по фото штрихкода.', mainKeyboard());
       return;
@@ -101,6 +113,11 @@ function createBot(config) {
     try {
       const photos = ctx.message.photo || [];
       const largestPhoto = photos[photos.length - 1];
+
+      if (!largestPhoto) {
+        throw new Error('Telegram не передал фото для обработки.');
+      }
+
       const telegramFile = await ctx.telegram.getFile(largestPhoto.file_id);
       const imageBuffer = await downloadTelegramFile(config.botToken, telegramFile.file_path);
       const barcode = await decodeEan13FromBuffer(imageBuffer);
@@ -130,15 +147,23 @@ function createBot(config) {
     } catch (error) {
       if (currentAttempt >= config.maxBarcodePhotoAttempts) {
         resetBarcodeFlow(ctx);
-        await ctx.reply(`Ошибка обработки фото. Попытки закончились.\n${error.message}`, mainKeyboard());
+        await ctx.reply(`Ошибка обработки фото. Попытки закончились.
+${error.message}`, mainKeyboard());
         return;
       }
 
-      await ctx.reply(`Не удалось обработать фото. Попробуйте еще раз. Попытка ${currentAttempt} из ${config.maxBarcodePhotoAttempts}.\n${error.message}`, mainKeyboard());
+      await ctx.reply(`Не удалось обработать фото. Попробуйте еще раз. Попытка ${currentAttempt} из ${config.maxBarcodePhotoAttempts}.
+${error.message}`, mainKeyboard());
     }
   });
 
   bot.on('message', async (ctx) => {
+    ensureSession(ctx);
+
+    if (ctx.message.photo || ctx.message.document) {
+      return;
+    }
+
     if (ctx.session.flow === 'awaiting_excel') {
       await ctx.reply('Сейчас ожидается Excel-файл. Нажмите «Загрузить файл» и отправьте документ формата .xlsx или .xls.', mainKeyboard());
       return;
