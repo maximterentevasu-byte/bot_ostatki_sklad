@@ -7,7 +7,7 @@ async function bootstrap() {
   const config = getConfig();
   const bot = createBot(config);
 
-  await bot.launch();
+  await bot.launch({ dropPendingUpdates: true });
   console.log('Telegram bot started');
 
   const shutdown = async (signal) => {

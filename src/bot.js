@@ -8,9 +8,14 @@ const { findProductByBarcode } = require('./services/excel');
 const { formatProductMessage } = require('./messages');
 
 function ensureSession(ctx) {
+  if (!ctx.session || typeof ctx.session !== 'object') {
+    ctx.session = {};
+  }
+
   if (!ctx.session.flow) {
     ctx.session.flow = 'idle';
   }
+
   if (typeof ctx.session.photoAttempts !== 'number') {
     ctx.session.photoAttempts = 0;
   }
@@ -25,7 +30,12 @@ function createBot(config) {
   const bot = new Telegraf(config.botToken);
   const githubService = new GitHubService(config);
 
-  bot.use(session());
+  bot.use(session({
+    defaultSession: () => ({
+      flow: 'idle',
+      photoAttempts: 0
+    })
+  }));
   bot.use((ctx, next) => {
     ensureSession(ctx);
     return next();
